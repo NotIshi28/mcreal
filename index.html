@@ -1,0 +1,106 @@
+<html><head>
+  <title>Enhanced Infinite Minecraft-like World</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+<style>
+  body { margin: 0; overflow: hidden; }
+  #info {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    text-align: center;
+    color: white;
+    font-family: Arial, sans-serif;
+    pointer-events: none;
+    text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
+  }
+  #crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.7);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+</style>
+</head>
+<body>
+<div id="info">Enhanced Infinite Minecraft-like World<br>WASD to move, Space/Shift to go up/down</div>
+<div id="crosshair"></div>
+<script>
+let scene, camera, renderer, controls;
+let raycaster;
+let world = {};
+let chunkSize = 16;
+let chunkHeight = 256;
+let blockSize = 1;
+let textureLoader, blockTextures;
+let generatedChunks = new Set();
+let chunks = {};
+let renderDistance = 6; // Increased render distance
+
+const simplex = new SimplexNoise();
+
+const atlasSize = 256;
+const tileSize = 16;
+const tilesPerRow = atlasSize / tileSize;
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87CEEB);
+  scene.fog = new THREE.Fog(0x87CEEB, 50, renderDistance * chunkSize * 0.8); // Add fog
+
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(5, 50, 5);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true }); // Enable antialiasing
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.shadowMap.enabled = true; // Enable shadow mapping
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Use soft shadows
+  document.body.appendChild(renderer.domElement);
+
+  textureLoader = new THREE.TextureLoader();
+  blockTextures = textureLoader.load('https://minecraft.wiki/images/Rd-161348_terrain.png', function(texture) {
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.LinearMipMapLinearFilter; // Use mipmapping for better texture quality at distance
+    generateInitialChunks();
+  });
+
+  raycaster = new THREE.Raycaster();
+
+  setupLights();
+  setupControls();
+  setupSky();
+
+  window.addEventListener('resize', onWindowResize, false);
+  document.addEventListener('mousedown', onDocumentMouseDown, false);
+  document.addEventListener('keydown', onKeyDown, false);
+  document.addEventListener('keyup', onKeyUp, false);
+}
+
+function setupLights() {
+  const ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
+  scene.add(ambientLight);
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(100, 100, 50);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.width = 2048;
+  directionalLight.shadow.mapSize.height = 2048;
+  directionalLight.shadow.camera.near = 1;
+  directionalLight.shadow.camera.far = 500;
+  directionalLight.shadow.camera.left = -200;
+  directionalLight.shadow.camera.right = 200;
+  directionalLight.shadow.camera.top = 200;
+  directionalLight.shadow.camera.bottom = -200;
+  scene.add(directionalLight);
+}
+</script>
+</body>
+</html>
