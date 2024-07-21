@@ -101,6 +101,136 @@ function setupLights() {
   directionalLight.shadow.camera.bottom = -200;
   scene.add(directionalLight);
 }
+
+function setupSky() {
+  const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
+  const skyMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: new THREE.Color(0x0077ff) },
+      bottomColor: { value: new THREE.Color(0xffffff) },
+      offset: { value: 33 },
+      exponent: { value: 0.6 }
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition + offset).y;
+        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+      }
+    `,
+    side: THREE.BackSide
+  });
+  const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+  scene.add(sky);
+}
+
+function setupControls() {
+  controls = new THREE.PointerLockControls(camera, document.body);
+  
+  document.addEventListener('click', () => {
+    controls.lock();
+  });
+
+  scene.add(controls.getObject());
+}
+
+function generateInitialChunks() {
+  const playerChunkX = Math.floor(camera.position.x / (chunkSize * blockSize));
+  const playerChunkZ = Math.floor(camera.position.z / (chunkSize * blockSize));
+
+  for (let x = -renderDistance; x <= renderDistance; x++) {
+    for (let z = -renderDistance; z <= renderDistance; z++) {
+      generateChunk(playerChunkX + x, playerChunkZ + z);
+    }
+  }
+}
+
+function generateChunk(chunkX, chunkZ) {
+  const chunkKey = `${chunkX},${chunkZ}`;
+  if (generatedChunks.has(chunkKey)) return;
+
+  let positions = [];
+  let normals = [];
+  let uvs = [];
+
+  for (let x = 0; x < chunkSize; x++) {
+    for (let z = 0; z < chunkSize; z++) {
+      let worldX = chunkX * chunkSize + x;
+      let worldZ = chunkZ * chunkSize + z;
+      let height = Math.floor(getNoiseHeight(worldX, worldZ));
+      
+      for (let y = 0; y <= height && y < chunkHeight; y++) {
+        let type = y === height ? 'grass' : (y > height - 4 ? 'dirt' : 'stone');
+        if (!world[`${worldX},${y},${worldZ}`]) {
+          world[`${worldX},${y},${worldZ}`] = type;
+        }
+      }
+    }
+  }
+
+  updateChunkGeometry(chunkX, chunkZ, positions, normals, uvs);
+
+  const chunkGeometry = new THREE.BufferGeometry();
+  chunkGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  chunkGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  chunkGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
+  const chunkMaterial = new THREE.MeshLambertMaterial({ 
+    map: blockTextures,
+    vertexColors: false,
+    shadowSide: THREE.FrontSide
+  });
+
+  const chunkMesh = new THREE.Mesh(chunkGeometry, chunkMaterial);
+  chunkMesh.position.set(chunkX * chunkSize * blockSize, 0, chunkZ * chunkSize * blockSize);
+  chunkMesh.castShadow = true;
+  chunkMesh.receiveShadow = true;
+  scene.add(chunkMesh);
+
+  chunks[chunkKey] = chunkMesh;
+  generatedChunks.add(chunkKey);
+}
+
+function getNoiseHeight(x, z) {
+  const scale = 0.005;
+  const octaves = 6;
+  const persistence = 0.5;
+  const lacunarity = 2.0;
+  const exponentiation = 4;
+
+  let amplitude = 1.0;
+  let frequency = 1.0;
+  let noiseHeight = 0;
+
+  for (let i = 0; i < octaves; i++) {
+    const sampleX = x * scale * frequency;
+    const sampleZ = z * scale * frequency;
+    
+    const perlinValue = simplex.noise2D(sampleX, sampleZ);
+    noiseHeight += perlinValue * amplitude;
+
+    amplitude *= persistence;
+    frequency *= lacunarity;
+  }
+
+  noiseHeight = (noiseHeight + 1) * 0.5;
+  noiseHeight = Math.pow(noiseHeight, exponentiation);
+
+  return Math.floor(noiseHeight * (chunkHeight - 1));
+}
+
 </script>
 </body>
 </html>
