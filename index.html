@@ -231,6 +231,113 @@ function getNoiseHeight(x, z) {
   return Math.floor(noiseHeight * (chunkHeight - 1));
 }
 
+function updateChunkGeometry(chunkX, chunkZ, positions, normals, uvs) {
+  for (let x = 0; x < chunkSize; x++) {
+    for (let z = 0; z < chunkSize; z++) {
+      for (let y = 0; y < chunkHeight; y++) {
+        let worldX = chunkX * chunkSize + x;
+        let worldY = y;
+        let worldZ = chunkZ * chunkSize + z;
+        let blockType = world[`${worldX},${worldY},${worldZ}`];
+        if (blockType) {
+          addBlockToChunk(x, y, z, blockType, worldX, worldY, worldZ, positions, normals, uvs);
+        }
+      }
+    }
+  }
+}
+
+function addBlockToChunk(x, y, z, type, worldX, worldY, worldZ, positions, normals, uvs) {
+  const topUVs = type === 'grass' ? getUVs(0, 0) : (type === 'dirt' ? getUVs(2, 0) : getUVs(1, 0));
+  const sideUVs = type === 'grass' ? getUVs(3, 0) : (type === 'dirt' ? getUVs(2, 0) : getUVs(1, 0));
+  const bottomUVs = type === 'grass' ? getUVs(2, 0) : (type === 'dirt' ? getUVs(2, 0) : getUVs(1, 0));
+
+  if (!world[`${worldX},${worldY+1},${worldZ}`]) {
+    addFace(x, y+1, z, x, y+1, z+1, x+1, y+1, z+1, x+1, y+1, z, 0, 1, 0, topUVs, positions, normals, uvs);
+  }
+  if (!world[`${worldX},${worldY-1},${worldZ}`]) {
+    addFace(x, y, z+1, x, y, z, x+1, y, z, x+1, y, z+1, 0, -1, 0, bottomUVs, positions, normals, uvs);
+  }
+  if (!world[`${worldX},${worldY},${worldZ+1}`]) {
+    addFace(x+1, y+1, z+1, x, y+1, z+1, x, y, z+1, x+1, y, z+1, 0, 0, 1, sideUVs, positions, normals, uvs);
+  }
+  if (!world[`${worldX},${worldY},${worldZ-1}`]) {
+    addFace(x, y+1, z, x+1, y+1, z, x+1, y, z, x, y, z, 0, 0, -1, sideUVs, positions, normals, uvs);
+  }
+  if (!world[`${worldX+1},${worldY},${worldZ}`]) {
+    addFace(x+1, y+1, z, x+1, y+1, z+1, x+1, y, z+1, x+1, y, z, 1, 0, 0, sideUVs, positions, normals, uvs);
+  }
+  if (!world[`${worldX-1},${worldY},${worldZ}`]) {
+    addFace(x, y+1, z+1, x, y+1, z, x, y, z, x, y, z+1, -1, 0, 0, sideUVs, positions, normals, uvs);
+  }
+}
+
+function addFace(x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, nx, ny, nz, uv, positions, normals, uvs) {
+  positions.push(
+    x1, y1, z1, x2, y2, z2, x3, y3, z3,
+    x1, y1, z1, x3, y3, z3, x4, y4, z4
+  );
+  for (let i = 0; i < 6; i++) {
+    normals.push(nx, ny, nz);
+  }
+  uvs.push(
+    uv[0].x, uv[0].y, uv[1].x, uv[1].y, uv[2].x, uv[2].y,
+    uv[0].x, uv[0].y, uv[2].x, uv[2].y, uv[3].x, uv[3].y
+  );
+}
+
+function getUVs(tileX, tileY) {
+  const u = tileX / tilesPerRow;
+  const v = 1 - (tileY + 1) / tilesPerRow;
+  const tileUVSize = 1 / tilesPerRow;
+  return [
+    new THREE.Vector2(u, v + tileUVSize),
+    new THREE.Vector2(u + tileUVSize, v + tileUVSize),
+    new THREE.Vector2(u + tileUVSize, v),
+    new THREE.Vector2(u, v)
+  ];
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function onDocumentMouseDown(event) {
+  if (!controls.isLocked) return;
+
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+  const intersects = raycaster.intersect
+Objects(Object.values(chunks));
+
+  if (intersects.length > 0) {
+    const intersect = intersects[0];
+    const voxelPosition = new THREE.Vector3()
+      .addVectors(intersect.point, intersect.face.normal.multiplyScalar(event.button === 0 ? 0.5 : -0.5))
+      .floor();
+
+    const worldX = Math.floor(voxelPosition.x);
+    const worldY = Math.floor(voxelPosition.y);
+    const worldZ = Math.floor(voxelPosition.z);
+
+    if (event.button === 0) {
+      placeBlock(worldX, worldY, worldZ, 'grass');
+    } else if (event.button === 2) {
+      removeBlock(worldX, worldY, worldZ);
+    }
+  }
+}
+
+function placeBlock(x, y, z, type) {
+  const key = `${x},${y},${z}`;
+  if (world[key]) return;
+
+  world[key] = type;
+  updateChunksAroundBlock(x, y, z);
+}
+
 </script>
 </body>
 </html>
